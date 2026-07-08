@@ -1,0 +1,2 @@
+-keep class com.jhaiian.csfc.** { *; }
+-keepattributes SourceFile,LineNumberTable

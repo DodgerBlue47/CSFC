@@ -1,0 +1,80 @@
+plugins {
+    id 'com.android.application'
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
+}
+
+android {
+    namespace 'com.jhaiian.csfc'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.jhaiian.csfc"
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    def hasSigningConfig = localProperties.getProperty('signingConfig.storePassword') != null
+
+    if (hasSigningConfig) {
+        signingConfigs {
+            release {
+                storeFile rootProject.file(localProperties.getProperty('signingConfig.storeFile', 'app/release_keystore.jks'))
+                storePassword localProperties.getProperty('signingConfig.storePassword')
+                keyAlias localProperties.getProperty('signingConfig.keyAlias')
+                keyPassword localProperties.getProperty('signingConfig.keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            debuggable true
+        }
+    }
+
+    def hasNativeLibs = fileTree(dir: 'src/main/jniLibs', include: '**/*.so').files.size() > 0 ||
+                        file('src/main/cpp/CMakeLists.txt').exists() ||
+                        file('CMakeLists.txt').exists() ||
+                        file('src/main/jni/Android.mk').exists()
+
+    splits {
+        abi {
+            enable hasNativeLibs
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+            universalApk true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.18.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.14.0'
+}

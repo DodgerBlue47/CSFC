@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="csfc_accent">#7C3AED</color>
+    <color name="csfc_accent_dark_bg">#1A1530</color>
+    <color name="csfc_accent_dark_variant">#2A0050</color>
+    <color name="csfc_surface_dark">#0D0114</color>
+    <color name="on_surface">#FFFFFFFF</color>
+    <color name="on_surface_medium">#99FFFFFF</color>
+</resources>

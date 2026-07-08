@@ -1,0 +1,16 @@
+CSFC (Calculator) is a free and open-source Android calculator that lets you choose how it evaluates order of operations, instead of locking you into a single fixed convention like most calculator apps.
+
+Supported order-of-operations systems:
+
+· PEMDAS - Parentheses, Exponents, Multiplication, Division, Addition, Subtraction (United States)
+· BEDMAS - Brackets, Exponents, Division, Multiplication, Addition, Subtraction (Canada and some other countries)
+· BODMAS - Brackets, Orders, Division, Multiplication, Addition, Subtraction (UK, India, and many Commonwealth countries)
+· BIDMAS - Brackets, Indices, Division, Multiplication, Addition, Subtraction (UK, Australia)
+· PEDMAS - Parentheses, Exponents, Division, Multiplication, Addition, Subtraction (Some Canadian schools)
+· GEMA - Grouping, Exponents, Multiplication/Division, Addition/Subtraction (Some math education materials)
+
+Switch between systems at any time and get results calculated the way you were taught, not the way a single app author decided everyone should be taught.
+
+Requirements
+
+· Android 8.0 (API 26) or higher

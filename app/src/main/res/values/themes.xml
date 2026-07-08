@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CSFC" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/csfc_accent</item>
+        <item name="colorOnPrimary">@color/csfc_accent_dark_bg</item>
+        <item name="colorSecondary">@color/csfc_accent</item>
+        <item name="colorOnSecondary">@color/csfc_accent_dark_bg</item>
+        <item name="colorSurface">@color/csfc_accent_dark_variant</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="android:colorBackground">@color/csfc_surface_dark</item>
+        <item name="android:windowBackground">@color/csfc_surface_dark</item>
+        <item name="android:statusBarColor">@color/csfc_accent_dark_variant</item>
+        <item name="android:navigationBarColor">@color/csfc_accent_dark_variant</item>
+    </style>
+</resources>

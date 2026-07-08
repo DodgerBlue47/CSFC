@@ -1,0 +1,97 @@
+name: Build CSFC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Download Gradle Wrapper JAR
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fL "https://github.com/gradle/gradle/raw/v8.6.0/gradle/wrapper/gradle-wrapper.jar" \
+            -o gradle/wrapper/gradle-wrapper.jar
+
+      - name: Grant Execute Permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Decode Signing Keystore
+        run: |
+          printf '%s' "${{ secrets.BASE_64_SIGNING_KEY }}" | tr -d '\n' | base64 -d > app/release_keystore.jks
+
+      - name: Create local.properties
+        run: printf '%s\n' "${{ secrets.LOCAL_PROPERTIES }}" > local.properties
+
+      - name: Build Release APKs
+        run: ./gradlew assembleRelease
+
+      - name: List generated APKs
+        run: find app/build/outputs/apk/release -name "*.apk" | sort
+
+      - name: Detect ABI split mode
+        id: mode
+        run: |
+          if ls app/build/outputs/apk/release/app-arm64-v8a-release.apk 2>/dev/null; then
+            echo "split=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "split=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Universal APK (single build)
+        if: steps.mode.outputs.split == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSFC-Universal
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload Universal APK
+        if: steps.mode.outputs.split == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSFC-Universal
+          path: app/build/outputs/apk/release/app-universal-release.apk
+          if-no-files-found: error
+
+      - name: Upload arm64-v8a APK
+        if: steps.mode.outputs.split == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSFC-arm64-v8a
+          path: app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          if-no-files-found: warn
+
+      - name: Upload armeabi-v7a APK
+        if: steps.mode.outputs.split == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSFC-armeabi-v7a
+          path: app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+          if-no-files-found: warn
+
+      - name: Upload x86 APK
+        if: steps.mode.outputs.split == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSFC-x86
+          path: app/build/outputs/apk/release/app-x86-release.apk
+          if-no-files-found: warn
+
+      - name: Upload x86_64 APK
+        if: steps.mode.outputs.split == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSFC-x86_64
+          path: app/build/outputs/apk/release/app-x86_64-release.apk
+          if-no-files-found: warn

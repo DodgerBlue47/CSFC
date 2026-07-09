@@ -17,86 +17,73 @@ sealed interface CalcToken {
 
 object CalculatorEngine {
 
-    private const val MAX_DIGITS = 15
+    // Longer patterns first so e.g. "10ˣ(" is matched before its leading digits are
+    // read as a plain number, and "eˣ(" before a bare constant "e".
+    private val functionPatterns = listOf(
+        "sin⁻¹(" to "sin⁻¹",
+        "cos⁻¹(" to "cos⁻¹",
+        "tan⁻¹(" to "tan⁻¹",
+        "sin(" to "sin",
+        "cos(" to "cos",
+        "tan(" to "tan",
+        "log(" to "log",
+        "ln(" to "ln",
+        "10ˣ(" to "10ˣ",
+        "eˣ(" to "eˣ",
+        "x²(" to "x²",
+        "√(" to "√",
+    )
 
-    private val usSymbols = DecimalFormatSymbols(Locale.US)
+    private val usSymbols = DecimalFormatSymbols(Locale.US).apply { minusSign = '−' }
     private val groupedFormat = DecimalFormat("#,##0.##########", usSymbols)
     private val plainFormat = DecimalFormat("0.##########", usSymbols)
 
-    fun appendDigit(tokens: List<CalcToken>, digit: Char): List<CalcToken> {
-        val last = tokens.lastOrNull()
-        return if (last is CalcToken.Num) {
-            if (last.text.count { it != '.' } >= MAX_DIGITS) return tokens
-            tokens.dropLast(1) + CalcToken.Num(last.text + digit)
-        } else {
-            tokens + CalcToken.Num(digit.toString())
+    // Turns the raw text the user has typed/edited into tokens. Returns null for text
+    // that doesn't parse at the character level at all (e.g. cursor-editing left behind
+    // half of a function name) so callers can fail soft instead of crashing.
+    fun tokenize(raw: String): List<CalcToken>? {
+        val tokens = mutableListOf<CalcToken>()
+        var i = 0
+        outer@ while (i < raw.length) {
+            for ((pattern, name) in functionPatterns) {
+                if (raw.startsWith(pattern, i)) {
+                    tokens += CalcToken.Func(name)
+                    tokens += CalcToken.LParen
+                    i += pattern.length
+                    continue@outer
+                }
+            }
+            val c = raw[i]
+            when {
+                c.isDigit() || c == '.' -> {
+                    val digits = StringBuilder()
+                    while (i < raw.length && (raw[i].isDigit() || raw[i] == '.' || raw[i] == ',')) {
+                        if (raw[i] != ',') digits.append(raw[i])
+                        i++
+                    }
+                    tokens += CalcToken.Num(digits.toString())
+                }
+                c == '+' -> { tokens += CalcToken.Op("+"); i++ }
+                c == '−' -> { tokens += CalcToken.Op("−"); i++ }
+                c == '×' -> { tokens += CalcToken.Op("×"); i++ }
+                c == '÷' -> { tokens += CalcToken.Op("÷"); i++ }
+                c == '^' -> { tokens += CalcToken.Op("^"); i++ }
+                c == '(' -> { tokens += CalcToken.LParen; i++ }
+                c == ')' -> { tokens += CalcToken.RParen; i++ }
+                c == '!' -> { tokens += CalcToken.Factorial; i++ }
+                c == '%' -> { tokens += CalcToken.Percent; i++ }
+                c == 'π' -> { tokens += CalcToken.Const("π"); i++ }
+                c == 'e' -> { tokens += CalcToken.Const("e"); i++ }
+                c == ',' -> { i++ }
+                else -> return null
+            }
         }
+        return tokens
     }
 
-    fun appendDecimal(tokens: List<CalcToken>): List<CalcToken> {
-        val last = tokens.lastOrNull()
-        return if (last is CalcToken.Num) {
-            if (last.text.contains('.')) tokens else tokens.dropLast(1) + CalcToken.Num(last.text + ".")
-        } else {
-            tokens + CalcToken.Num("0.")
-        }
-    }
-
-    fun appendConstant(tokens: List<CalcToken>, symbol: String): List<CalcToken> =
-        tokens + CalcToken.Const(symbol)
-
-    fun appendFunction(tokens: List<CalcToken>, name: String): List<CalcToken> =
-        tokens + CalcToken.Func(name) + CalcToken.LParen
-
-    fun appendParen(tokens: List<CalcToken>): List<CalcToken> {
-        val openCount = tokens.count { it is CalcToken.LParen }
-        val closeCount = tokens.count { it is CalcToken.RParen }
-        val last = tokens.lastOrNull()
-        val canClose = openCount > closeCount && isCompleteValue(last)
-        return tokens + if (canClose) CalcToken.RParen else CalcToken.LParen
-    }
-
-    fun appendPercent(tokens: List<CalcToken>): List<CalcToken> {
-        val last = tokens.lastOrNull()
-        return if (isCompleteValue(last)) tokens + CalcToken.Percent else tokens
-    }
-
-    fun appendFactorial(tokens: List<CalcToken>): List<CalcToken> {
-        val last = tokens.lastOrNull()
-        return if (isCompleteValue(last)) tokens + CalcToken.Factorial else tokens
-    }
-
-    // '-' after an operator stacks as a leading sign for the next operand instead of
-    // replacing it, since "5 x -3" is a valid, common thing to type. Any other operator
-    // tapped while one is already pending replaces the whole pending run.
-    fun appendOperator(tokens: List<CalcToken>, newOp: String): List<CalcToken> {
-        val last = tokens.lastOrNull()
-        if (last == null || last is CalcToken.LParen) {
-            return if (newOp == "−") tokens + CalcToken.Op("−") else tokens
-        }
-        val runLength = trailingOperatorRunLength(tokens)
-        if (runLength == 0) return tokens + CalcToken.Op(newOp)
-        val lastOp = last as CalcToken.Op
-        return if (runLength == 1 && newOp == "−" && lastOp.symbol != "−") {
-            tokens + CalcToken.Op("−")
-        } else {
-            tokens.dropLast(runLength) + CalcToken.Op(newOp)
-        }
-    }
-
-    fun backspace(tokens: List<CalcToken>): List<CalcToken> {
-        if (tokens.isEmpty()) return tokens
-        val last = tokens.last()
-        if (last is CalcToken.Num && last.text.length > 1) {
-            return tokens.dropLast(1) + CalcToken.Num(last.text.dropLast(1))
-        }
-        val withoutLast = tokens.dropLast(1)
-        return if (last is CalcToken.LParen && withoutLast.lastOrNull() is CalcToken.Func) {
-            withoutLast.dropLast(1)
-        } else {
-            withoutLast
-        }
-    }
+    fun isCompleteValue(token: CalcToken?): Boolean = token is CalcToken.Num ||
+        token is CalcToken.RParen || token is CalcToken.Const || token is CalcToken.Percent ||
+        token is CalcToken.Factorial
 
     fun tryEvaluate(tokens: List<CalcToken>, isDegrees: Boolean): Double? {
         if (tokens.isEmpty()) return null
@@ -109,7 +96,15 @@ object CalculatorEngine {
         }
     }
 
-    fun rawNumberString(value: Double): String = plainFormat.format(value)
+    // Text fed back into the editable field after "=". Grouped like the preview was
+    // for normal magnitudes (matches the reference behavior); for extreme values this
+    // deliberately skips scientific notation, since "e" would otherwise be re-read as
+    // Euler's number by the tokenizer if the user keeps calculating from it.
+    fun continuationText(value: Double): String {
+        if (value == 0.0) return "0"
+        val abs = Math.abs(value)
+        return if (abs < 1e-9 || abs >= 1e15) plainFormat.format(value) else groupedFormat.format(value)
+    }
 
     fun formatResultForDisplay(value: Double): String {
         if (value == 0.0) return "0"
@@ -121,46 +116,10 @@ object CalculatorEngine {
         }
     }
 
-    fun tokensToDisplayString(tokens: List<CalcToken>): String {
-        val sb = StringBuilder()
-        for (t in tokens) {
-            when (t) {
-                is CalcToken.Num -> sb.append(formatNumberForDisplay(t.text))
-                is CalcToken.Op -> sb.append(t.symbol)
-                is CalcToken.LParen -> sb.append('(')
-                is CalcToken.RParen -> sb.append(')')
-                is CalcToken.Func -> sb.append(t.name)
-                is CalcToken.Const -> sb.append(t.symbol)
-                is CalcToken.Percent -> sb.append('%')
-                is CalcToken.Factorial -> sb.append('!')
-            }
-        }
-        return sb.toString()
-    }
-
-    private fun isCompleteValue(token: CalcToken?): Boolean = token is CalcToken.Num ||
-        token is CalcToken.RParen || token is CalcToken.Const || token is CalcToken.Percent ||
-        token is CalcToken.Factorial
-
-    private fun trailingOperatorRunLength(tokens: List<CalcToken>): Int {
-        var count = 0
-        var i = tokens.size - 1
-        while (i >= 0 && tokens[i] is CalcToken.Op) { count++; i-- }
-        return count
-    }
-
     private fun balanceParens(tokens: List<CalcToken>): List<CalcToken> {
         val open = tokens.count { it is CalcToken.LParen }
         val close = tokens.count { it is CalcToken.RParen }
         return if (open > close) tokens + List(open - close) { CalcToken.RParen } else tokens
-    }
-
-    private fun formatNumberForDisplay(raw: String): String {
-        if (raw.isEmpty()) return raw
-        val parts = raw.split(".", limit = 2)
-        val intPart = parts[0].ifEmpty { "0" }
-        val grouped = intPart.toLongOrNull()?.let { groupedFormat.format(it).substringBefore('.') } ?: intPart
-        return if (parts.size == 2) "$grouped.${parts[1]}" else grouped
     }
 }
 

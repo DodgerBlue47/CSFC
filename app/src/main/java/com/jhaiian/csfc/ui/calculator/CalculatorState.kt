@@ -1,5 +1,8 @@
 package com.jhaiian.csfc.ui.calculator
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+
 sealed interface CalculatorAction {
     data class Digit(val digit: Char) : CalculatorAction
     data object Decimal : CalculatorAction
@@ -22,21 +25,29 @@ sealed interface ResultDisplay {
     data class Value(val formatted: String) : ResultDisplay
 }
 
+private const val MAX_LENGTH = 100
+
 data class CalculatorUiState(
-    val tokens: List<CalcToken> = emptyList(),
+    val fieldValue: TextFieldValue = TextFieldValue(""),
     val isDegrees: Boolean = true,
     val isInverse: Boolean = false,
     val isError: Boolean = false,
     val justEvaluated: Boolean = false,
 ) {
+    // What operator, if any, sits immediately left of the cursor — used to highlight
+    // the pending operator key the same way the reference design highlights it.
     val activeOperator: String?
-        get() = (tokens.lastOrNull() as? CalcToken.Op)?.symbol
+        get() {
+            val tokens = CalculatorEngine.tokenize(fieldValue.text.substring(0, fieldValue.selection.min)) ?: return null
+            return (tokens.lastOrNull() as? CalcToken.Op)?.symbol
+        }
 
     val resultDisplay: ResultDisplay
         get() = when {
             isError -> ResultDisplay.Error
-            tokens.isEmpty() -> ResultDisplay.Blank
-            else -> CalculatorEngine.tryEvaluate(tokens, isDegrees)
+            justEvaluated || fieldValue.text.isEmpty() -> ResultDisplay.Blank
+            else -> CalculatorEngine.tokenize(fieldValue.text)
+                ?.let { CalculatorEngine.tryEvaluate(it, isDegrees) }
                 ?.let { ResultDisplay.Value(CalculatorEngine.formatResultForDisplay(it)) }
                 ?: ResultDisplay.Blank
         }
@@ -47,55 +58,91 @@ fun reduceCalculatorState(state: CalculatorUiState, action: CalculatorAction): C
         return reduceCalculatorState(freshState(state), action)
     }
 
+    // Digits/functions/constants/parens start a new entry after "="; operators and
+    // postfix keys continue from the result that's now sitting in the field.
+    fun startFresh() = if (state.justEvaluated) TextFieldValue("") else state.fieldValue
+
     return when (action) {
         CalculatorAction.Clear -> freshState(state)
         is CalculatorAction.Digit -> state.copy(
-            tokens = CalculatorEngine.appendDigit(if (state.justEvaluated) emptyList() else state.tokens, action.digit),
+            fieldValue = insertText(startFresh(), action.digit.toString()),
             justEvaluated = false,
         )
-        CalculatorAction.Decimal -> state.copy(
-            tokens = CalculatorEngine.appendDecimal(if (state.justEvaluated) emptyList() else state.tokens),
-            justEvaluated = false,
-        )
+        CalculatorAction.Decimal -> state.copy(fieldValue = insertText(startFresh(), "."), justEvaluated = false)
         is CalculatorAction.Operator -> state.copy(
-            tokens = CalculatorEngine.appendOperator(
-                if (state.justEvaluated) continuedTokens(state) else state.tokens,
-                action.symbol,
-            ),
+            fieldValue = insertText(state.fieldValue, action.symbol),
             justEvaluated = false,
         )
         is CalculatorAction.FunctionKey -> state.copy(
-            tokens = CalculatorEngine.appendFunction(if (state.justEvaluated) emptyList() else state.tokens, action.name),
+            fieldValue = insertText(startFresh(), action.name + "("),
             justEvaluated = false,
         )
         is CalculatorAction.ConstantKey -> state.copy(
-            tokens = CalculatorEngine.appendConstant(if (state.justEvaluated) emptyList() else state.tokens, action.symbol),
+            fieldValue = insertText(startFresh(), action.symbol),
             justEvaluated = false,
         )
-        CalculatorAction.Parenthesis -> state.copy(
-            tokens = CalculatorEngine.appendParen(if (state.justEvaluated) emptyList() else state.tokens),
-            justEvaluated = false,
-        )
-        CalculatorAction.Percent -> state.copy(tokens = CalculatorEngine.appendPercent(state.tokens), justEvaluated = false)
-        CalculatorAction.Factorial -> state.copy(tokens = CalculatorEngine.appendFactorial(state.tokens), justEvaluated = false)
-        CalculatorAction.Backspace -> if (state.justEvaluated) {
-            freshState(state)
-        } else {
-            state.copy(tokens = CalculatorEngine.backspace(state.tokens))
+        CalculatorAction.Parenthesis -> {
+            val base = startFresh()
+            state.copy(fieldValue = insertText(base, smartParenText(base)), justEvaluated = false)
         }
+        CalculatorAction.Percent -> if (isCompleteValueBeforeCursor(state.fieldValue)) {
+            state.copy(fieldValue = insertText(state.fieldValue, "%"), justEvaluated = false)
+        } else {
+            state
+        }
+        CalculatorAction.Factorial -> if (isCompleteValueBeforeCursor(state.fieldValue)) {
+            state.copy(fieldValue = insertText(state.fieldValue, "!"), justEvaluated = false)
+        } else {
+            state
+        }
+        CalculatorAction.Backspace -> state.copy(fieldValue = backspaceText(state.fieldValue), justEvaluated = false)
         CalculatorAction.Equals -> {
-            val result = CalculatorEngine.tryEvaluate(state.tokens, state.isDegrees)
-            if (result == null) state.copy(isError = true, justEvaluated = true) else state.copy(justEvaluated = true)
+            val tokens = CalculatorEngine.tokenize(state.fieldValue.text)
+            val result = tokens?.let { CalculatorEngine.tryEvaluate(it, state.isDegrees) }
+            if (result == null) {
+                state.copy(isError = true, justEvaluated = true)
+            } else {
+                val text = CalculatorEngine.continuationText(result)
+                state.copy(fieldValue = TextFieldValue(text, TextRange(text.length)), justEvaluated = true)
+            }
         }
         CalculatorAction.ToggleDegrees -> state.copy(isDegrees = !state.isDegrees)
         CalculatorAction.ToggleInverse -> state.copy(isInverse = !state.isInverse)
     }
 }
 
-private fun freshState(state: CalculatorUiState) = CalculatorUiState(isDegrees = state.isDegrees, isInverse = state.isInverse)
+private fun freshState(state: CalculatorUiState) =
+    CalculatorUiState(isDegrees = state.isDegrees, isInverse = state.isInverse)
 
-// After "=", tapping an operator continues from the previous result rather than starting over.
-private fun continuedTokens(state: CalculatorUiState): List<CalcToken> {
-    val previous = CalculatorEngine.tryEvaluate(state.tokens, state.isDegrees) ?: return emptyList()
-    return listOf(CalcToken.Num(CalculatorEngine.rawNumberString(previous)))
+private fun insertText(value: TextFieldValue, insert: String): TextFieldValue {
+    val text = value.text
+    val start = value.selection.min
+    val end = value.selection.max
+    if (text.length - (end - start) + insert.length > MAX_LENGTH) return value
+    val newText = text.substring(0, start) + insert + text.substring(end)
+    return TextFieldValue(newText, TextRange(start + insert.length))
+}
+
+private fun backspaceText(value: TextFieldValue): TextFieldValue {
+    val text = value.text
+    val start = value.selection.min
+    val end = value.selection.max
+    return when {
+        start != end -> TextFieldValue(text.substring(0, start) + text.substring(end), TextRange(start))
+        start > 0 -> TextFieldValue(text.substring(0, start - 1) + text.substring(start), TextRange(start - 1))
+        else -> value
+    }
+}
+
+private fun isCompleteValueBeforeCursor(value: TextFieldValue): Boolean {
+    val tokens = CalculatorEngine.tokenize(value.text.substring(0, value.selection.min)) ?: return false
+    return CalculatorEngine.isCompleteValue(tokens.lastOrNull())
+}
+
+private fun smartParenText(value: TextFieldValue): String {
+    val before = value.text.substring(0, value.selection.min)
+    val tokens = CalculatorEngine.tokenize(before) ?: return "("
+    val openCount = tokens.count { it is CalcToken.LParen }
+    val closeCount = tokens.count { it is CalcToken.RParen }
+    return if (openCount > closeCount && CalculatorEngine.isCompleteValue(tokens.lastOrNull())) ")" else "("
 }

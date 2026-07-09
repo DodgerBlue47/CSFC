@@ -8,8 +8,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,14 +44,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
@@ -55,6 +64,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jhaiian.csfc.R
 import com.jhaiian.csfc.ui.theme.CSFCTheme
 import com.jhaiian.csfc.ui.theme.CalculatorTheme
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+private const val BACKSPACE_INITIAL_DELAY_MS = 450L
+private const val BACKSPACE_REPEAT_INTERVAL_MS = 90L
 
 @Composable
 fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
@@ -62,13 +77,12 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
     val colors = CalculatorTheme.colors
     var isExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val expressionText = CalculatorEngine.tokensToDisplayString(uiState.tokens)
-        .ifEmpty { stringResource(R.string.key_0) }
     val resultText = when (val result = uiState.resultDisplay) {
         is ResultDisplay.Value -> result.formatted
         ResultDisplay.Error -> stringResource(R.string.error_label)
         ResultDisplay.Blank -> ""
     }
+    val bigTextColor = if (uiState.justEvaluated) colors.displayResult else colors.displayExpression
 
     fun operatorContainer(symbol: String) = if (uiState.activeOperator == symbol) colors.keyActive else colors.keyOperator
     fun operatorContent(symbol: String) = if (uiState.activeOperator == symbol) colors.keyActiveText else colors.keyOperatorText
@@ -88,12 +102,26 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
             verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.End,
         ) {
-            Text(
-                text = expressionText,
-                color = colors.displayExpression,
-                style = MaterialTheme.typography.displayLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            BasicTextField(
+                value = uiState.fieldValue,
+                onValueChange = { viewModel.onFieldValueChange(it) },
+                readOnly = true,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.displayLarge.copy(color = bigTextColor, textAlign = TextAlign.End),
+                cursorBrush = SolidColor(bigTextColor),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { innerField ->
+                    Box(contentAlignment = Alignment.CenterEnd) {
+                        if (uiState.fieldValue.text.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.key_0),
+                                style = MaterialTheme.typography.displayLarge,
+                                color = colors.displayExpression,
+                            )
+                        }
+                        innerField()
+                    }
+                },
             )
             Spacer(Modifier.height(12.dp))
             Text(
@@ -248,12 +276,11 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                         contentColor = colors.keyNumberText,
                         onClick = { viewModel.dispatch(CalculatorAction.Decimal) },
                     )
-                    CalculatorIconKey(
-                        icon = Icons.AutoMirrored.Filled.Backspace,
-                        contentDescription = stringResource(R.string.content_description_backspace),
+                    BackspaceKey(
                         containerColor = colors.keyNumber,
                         contentColor = colors.keyNumberText,
-                        onClick = { viewModel.dispatch(CalculatorAction.Backspace) },
+                        contentDescription = stringResource(R.string.content_description_backspace),
+                        onRepeat = { viewModel.dispatch(CalculatorAction.Backspace) },
                     )
                     CalculatorKey(
                         stringResource(R.string.key_equals),
@@ -389,14 +416,16 @@ private fun RowScope.CalculatorKey(
     }
 }
 
+// Fires once immediately on press (a normal tap), then keeps firing at a fixed interval
+// for as long as the key is held. Ripple is driven manually since the gesture is custom.
 @Composable
-private fun RowScope.CalculatorIconKey(
-    icon: ImageVector,
-    contentDescription: String,
+private fun RowScope.BackspaceKey(
     containerColor: Color,
     contentColor: Color,
-    onClick: () -> Unit = {},
+    contentDescription: String,
+    onRepeat: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .weight(1f)
@@ -404,10 +433,33 @@ private fun RowScope.CalculatorIconKey(
             .padding(6.dp)
             .clip(CircleShape)
             .background(containerColor)
-            .clickable(onClick = onClick),
+            .indication(interactionSource, LocalIndication.current)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = { offset ->
+                        val press = PressInteraction.Press(offset)
+                        interactionSource.emit(press)
+                        coroutineScope {
+                            val repeatJob = launch {
+                                onRepeat()
+                                delay(BACKSPACE_INITIAL_DELAY_MS)
+                                while (true) {
+                                    onRepeat()
+                                    delay(BACKSPACE_REPEAT_INTERVAL_MS)
+                                }
+                            }
+                            val released = tryAwaitRelease()
+                            repeatJob.cancel()
+                            interactionSource.emit(
+                                if (released) PressInteraction.Release(press) else PressInteraction.Cancel(press),
+                            )
+                        }
+                    },
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(imageVector = icon, contentDescription = contentDescription, tint = contentColor)
+        Icon(imageVector = Icons.AutoMirrored.Filled.Backspace, contentDescription = contentDescription, tint = contentColor)
     }
 }
 

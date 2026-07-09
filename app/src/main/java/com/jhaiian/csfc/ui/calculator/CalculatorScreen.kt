@@ -44,20 +44,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jhaiian.csfc.R
 import com.jhaiian.csfc.ui.theme.CSFCTheme
 import com.jhaiian.csfc.ui.theme.CalculatorTheme
 
 @Composable
-fun CalculatorScreen() {
-    var isExpanded by rememberSaveable { mutableStateOf(false) }
+fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
+    val uiState = viewModel.uiState
     val colors = CalculatorTheme.colors
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val expressionText = CalculatorEngine.tokensToDisplayString(uiState.tokens)
+        .ifEmpty { stringResource(R.string.key_0) }
+    val resultText = when (val result = uiState.resultDisplay) {
+        is ResultDisplay.Value -> result.formatted
+        ResultDisplay.Error -> stringResource(R.string.error_label)
+        ResultDisplay.Blank -> ""
+    }
+
+    fun operatorContainer(symbol: String) = if (uiState.activeOperator == symbol) colors.keyActive else colors.keyOperator
+    fun operatorContent(symbol: String) = if (uiState.activeOperator == symbol) colors.keyActiveText else colors.keyOperatorText
 
     Column(
         modifier = Modifier
@@ -75,18 +89,19 @@ fun CalculatorScreen() {
             horizontalAlignment = Alignment.End,
         ) {
             Text(
-                text = stringResource(R.string.sample_expression),
+                text = expressionText,
                 color = colors.displayExpression,
                 style = MaterialTheme.typography.displayLarge,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = stringResource(R.string.sample_result),
+                text = resultText,
                 color = colors.displayResult,
                 style = MaterialTheme.typography.headlineMedium,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(24.dp))
         }
@@ -110,9 +125,54 @@ fun CalculatorScreen() {
                 exit = shrinkVertically(tween(220)) + fadeOut(tween(140)),
             ) {
                 Column(Modifier.fillMaxWidth()) {
-                    ScientificRow(R.string.key_sqrt, R.string.key_pi, R.string.key_power, R.string.key_factorial)
-                    ScientificRow(R.string.key_deg, R.string.key_sin, R.string.key_cos, R.string.key_tan)
-                    ScientificRow(R.string.key_inv, R.string.key_e, R.string.key_ln, R.string.key_log)
+                    ScientificRow(
+                        listOf(
+                            SciKey(stringResource(if (uiState.isInverse) R.string.key_sqrt_inv else R.string.key_sqrt)) {
+                                viewModel.dispatch(CalculatorAction.FunctionKey(if (uiState.isInverse) "x²" else "√"))
+                            },
+                            SciKey(stringResource(R.string.key_pi)) {
+                                viewModel.dispatch(CalculatorAction.ConstantKey("π"))
+                            },
+                            SciKey(stringResource(R.string.key_power)) {
+                                viewModel.dispatch(CalculatorAction.Operator("^"))
+                            },
+                            SciKey(stringResource(R.string.key_factorial)) {
+                                viewModel.dispatch(CalculatorAction.Factorial)
+                            },
+                        ),
+                    )
+                    ScientificRow(
+                        listOf(
+                            SciKey(stringResource(if (uiState.isDegrees) R.string.key_deg else R.string.key_rad)) {
+                                viewModel.dispatch(CalculatorAction.ToggleDegrees)
+                            },
+                            SciKey(stringResource(if (uiState.isInverse) R.string.key_sin_inv else R.string.key_sin)) {
+                                viewModel.dispatch(CalculatorAction.FunctionKey(if (uiState.isInverse) "sin⁻¹" else "sin"))
+                            },
+                            SciKey(stringResource(if (uiState.isInverse) R.string.key_cos_inv else R.string.key_cos)) {
+                                viewModel.dispatch(CalculatorAction.FunctionKey(if (uiState.isInverse) "cos⁻¹" else "cos"))
+                            },
+                            SciKey(stringResource(if (uiState.isInverse) R.string.key_tan_inv else R.string.key_tan)) {
+                                viewModel.dispatch(CalculatorAction.FunctionKey(if (uiState.isInverse) "tan⁻¹" else "tan"))
+                            },
+                        ),
+                    )
+                    ScientificRow(
+                        listOf(
+                            SciKey(stringResource(R.string.key_inv), highlighted = uiState.isInverse) {
+                                viewModel.dispatch(CalculatorAction.ToggleInverse)
+                            },
+                            SciKey(stringResource(R.string.key_e)) {
+                                viewModel.dispatch(CalculatorAction.ConstantKey("e"))
+                            },
+                            SciKey(stringResource(if (uiState.isInverse) R.string.key_ln_inv else R.string.key_ln)) {
+                                viewModel.dispatch(CalculatorAction.FunctionKey(if (uiState.isInverse) "eˣ" else "ln"))
+                            },
+                            SciKey(stringResource(if (uiState.isInverse) R.string.key_log_inv else R.string.key_log)) {
+                                viewModel.dispatch(CalculatorAction.FunctionKey(if (uiState.isInverse) "10ˣ" else "log"))
+                            },
+                        ),
+                    )
                 }
             }
 
@@ -122,39 +182,85 @@ fun CalculatorScreen() {
                     .fillMaxWidth(),
             ) {
                 KeyRow {
-                    CalculatorKey(stringResource(R.string.key_ac), containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
-                    CalculatorKey(stringResource(R.string.key_parentheses), containerColor = colors.keyOperator, contentColor = colors.keyOperatorText)
-                    CalculatorKey(stringResource(R.string.key_percent), containerColor = colors.keyOperator, contentColor = colors.keyOperatorText)
-                    CalculatorKey(stringResource(R.string.key_divide), containerColor = colors.keyOperator, contentColor = colors.keyOperatorText)
+                    CalculatorKey(
+                        stringResource(R.string.key_ac),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        onClick = { viewModel.dispatch(CalculatorAction.Clear) },
+                    )
+                    CalculatorKey(
+                        stringResource(R.string.key_parentheses),
+                        containerColor = colors.keyOperator,
+                        contentColor = colors.keyOperatorText,
+                        onClick = { viewModel.dispatch(CalculatorAction.Parenthesis) },
+                    )
+                    CalculatorKey(
+                        stringResource(R.string.key_percent),
+                        containerColor = colors.keyOperator,
+                        contentColor = colors.keyOperatorText,
+                        onClick = { viewModel.dispatch(CalculatorAction.Percent) },
+                    )
+                    CalculatorKey(
+                        stringResource(R.string.key_divide),
+                        containerColor = operatorContainer("÷"),
+                        contentColor = operatorContent("÷"),
+                        onClick = { viewModel.dispatch(CalculatorAction.Operator("÷")) },
+                    )
                 }
                 KeyRow {
-                    CalculatorKey(stringResource(R.string.key_7), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_8), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_9), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_multiply), containerColor = colors.keyActive, contentColor = colors.keyActiveText)
+                    CalculatorKey(stringResource(R.string.key_7), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('7')) })
+                    CalculatorKey(stringResource(R.string.key_8), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('8')) })
+                    CalculatorKey(stringResource(R.string.key_9), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('9')) })
+                    CalculatorKey(
+                        stringResource(R.string.key_multiply),
+                        containerColor = operatorContainer("×"),
+                        contentColor = operatorContent("×"),
+                        onClick = { viewModel.dispatch(CalculatorAction.Operator("×")) },
+                    )
                 }
                 KeyRow {
-                    CalculatorKey(stringResource(R.string.key_4), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_5), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_6), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_subtract), containerColor = colors.keyOperator, contentColor = colors.keyOperatorText)
+                    CalculatorKey(stringResource(R.string.key_4), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('4')) })
+                    CalculatorKey(stringResource(R.string.key_5), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('5')) })
+                    CalculatorKey(stringResource(R.string.key_6), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('6')) })
+                    CalculatorKey(
+                        stringResource(R.string.key_subtract),
+                        containerColor = operatorContainer("−"),
+                        contentColor = operatorContent("−"),
+                        onClick = { viewModel.dispatch(CalculatorAction.Operator("−")) },
+                    )
                 }
                 KeyRow {
-                    CalculatorKey(stringResource(R.string.key_1), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_2), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_3), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_add), containerColor = colors.keyOperator, contentColor = colors.keyOperatorText)
+                    CalculatorKey(stringResource(R.string.key_1), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('1')) })
+                    CalculatorKey(stringResource(R.string.key_2), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('2')) })
+                    CalculatorKey(stringResource(R.string.key_3), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('3')) })
+                    CalculatorKey(
+                        stringResource(R.string.key_add),
+                        containerColor = operatorContainer("+"),
+                        contentColor = operatorContent("+"),
+                        onClick = { viewModel.dispatch(CalculatorAction.Operator("+")) },
+                    )
                 }
                 KeyRow {
-                    CalculatorKey(stringResource(R.string.key_0), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
-                    CalculatorKey(stringResource(R.string.key_decimal), containerColor = colors.keyNumber, contentColor = colors.keyNumberText)
+                    CalculatorKey(stringResource(R.string.key_0), containerColor = colors.keyNumber, contentColor = colors.keyNumberText, onClick = { viewModel.dispatch(CalculatorAction.Digit('0')) })
+                    CalculatorKey(
+                        stringResource(R.string.key_decimal),
+                        containerColor = colors.keyNumber,
+                        contentColor = colors.keyNumberText,
+                        onClick = { viewModel.dispatch(CalculatorAction.Decimal) },
+                    )
                     CalculatorIconKey(
                         icon = Icons.AutoMirrored.Filled.Backspace,
                         contentDescription = stringResource(R.string.content_description_backspace),
                         containerColor = colors.keyNumber,
                         contentColor = colors.keyNumberText,
+                        onClick = { viewModel.dispatch(CalculatorAction.Backspace) },
                     )
-                    CalculatorKey(stringResource(R.string.key_equals), containerColor = colors.keyActive, contentColor = colors.keyActiveText)
+                    CalculatorKey(
+                        stringResource(R.string.key_equals),
+                        containerColor = colors.keyActive,
+                        contentColor = colors.keyActiveText,
+                        onClick = { viewModel.dispatch(CalculatorAction.Equals) },
+                    )
                 }
             }
         }
@@ -213,8 +319,14 @@ private fun ExpandToggle(
     }
 }
 
+private data class SciKey(
+    val label: String,
+    val highlighted: Boolean = false,
+    val onClick: () -> Unit,
+)
+
 @Composable
-private fun ColumnScope.ScientificRow(vararg labelRes: Int) {
+private fun ColumnScope.ScientificRow(keys: List<SciKey>) {
     val colors = CalculatorTheme.colors
     Row(
         modifier = Modifier
@@ -222,20 +334,20 @@ private fun ColumnScope.ScientificRow(vararg labelRes: Int) {
             .height(52.dp)
             .padding(vertical = 3.dp),
     ) {
-        labelRes.forEach { res ->
+        keys.forEach { key ->
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .padding(horizontal = 4.dp)
                     .clip(CircleShape)
-                    .background(colors.keyOperator)
-                    .clickable {},
+                    .background(if (key.highlighted) colors.keyActive else colors.keyOperator)
+                    .clickable(onClick = key.onClick),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = stringResource(res),
-                    color = colors.keyOperatorText,
+                    text = key.label,
+                    color = if (key.highlighted) colors.keyActiveText else colors.keyOperatorText,
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
@@ -279,7 +391,7 @@ private fun RowScope.CalculatorKey(
 
 @Composable
 private fun RowScope.CalculatorIconKey(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     contentDescription: String,
     containerColor: Color,
     contentColor: Color,
@@ -301,6 +413,6 @@ private fun RowScope.CalculatorIconKey(
 
 @Preview(showBackground = true, backgroundColor = 0xFF14121D, widthDp = 360, heightDp = 800)
 @Composable
-private fun CalculatorScreenCollapsedPreview() {
+private fun CalculatorScreenPreview() {
     CSFCTheme { CalculatorScreen() }
 }

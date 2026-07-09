@@ -27,6 +27,7 @@
     <string name="key_power">^</string>
     <string name="key_factorial">!</string>
     <string name="key_deg">Deg</string>
+    <string name="key_rad">Rad</string>
     <string name="key_sin">sin</string>
     <string name="key_cos">cos</string>
     <string name="key_tan">tan</string>
@@ -34,12 +35,16 @@
     <string name="key_e">e</string>
     <string name="key_ln">ln</string>
     <string name="key_log">log</string>
+    <string name="key_sqrt_inv">x²</string>
+    <string name="key_sin_inv">sin⁻¹</string>
+    <string name="key_cos_inv">cos⁻¹</string>
+    <string name="key_tan_inv">tan⁻¹</string>
+    <string name="key_ln_inv">eˣ</string>
+    <string name="key_log_inv">10ˣ</string>
+    <string name="error_label">Error</string>
 
     <string name="content_description_backspace">Backspace</string>
     <string name="content_description_more_options">More options</string>
     <string name="content_description_expand">Show scientific keys</string>
     <string name="content_description_collapse">Hide scientific keys</string>
-
-    <string name="sample_expression">699×66</string>
-    <string name="sample_result">46,134</string>
 </resources>

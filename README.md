@@ -4,7 +4,7 @@
 
 # CSFC
 
-**Calculator**
+**Calc Stand For Calculator**
 
 Android Calculator With Configurable Order of Operations
 

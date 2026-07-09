@@ -1,4 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">CSFC</string>
+
+    <string name="key_ac">AC</string>
+    <string name="key_parentheses">( )</string>
+    <string name="key_percent">%</string>
+    <string name="key_divide">÷</string>
+    <string name="key_multiply">×</string>
+    <string name="key_subtract">−</string>
+    <string name="key_add">+</string>
+    <string name="key_decimal">.</string>
+    <string name="key_equals">=</string>
+    <string name="key_0">0</string>
+    <string name="key_1">1</string>
+    <string name="key_2">2</string>
+    <string name="key_3">3</string>
+    <string name="key_4">4</string>
+    <string name="key_5">5</string>
+    <string name="key_6">6</string>
+    <string name="key_7">7</string>
+    <string name="key_8">8</string>
+    <string name="key_9">9</string>
+
+    <string name="key_sqrt">√</string>
+    <string name="key_pi">π</string>
+    <string name="key_power">^</string>
+    <string name="key_factorial">!</string>
+    <string name="key_deg">Deg</string>
+    <string name="key_sin">sin</string>
+    <string name="key_cos">cos</string>
+    <string name="key_tan">tan</string>
+    <string name="key_inv">Inv</string>
+    <string name="key_e">e</string>
+    <string name="key_ln">ln</string>
+    <string name="key_log">log</string>
+
+    <string name="content_description_backspace">Backspace</string>
+    <string name="content_description_more_options">More options</string>
+    <string name="content_description_expand">Show scientific keys</string>
+    <string name="content_description_collapse">Hide scientific keys</string>
+
+    <string name="sample_expression">699×66</string>
+    <string name="sample_result">46,134</string>
 </resources>

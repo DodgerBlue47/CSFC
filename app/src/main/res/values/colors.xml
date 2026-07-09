@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="csfc_accent">#7C3AED</color>
+    <color name="csfc_accent">#4F00D6</color>
     <color name="csfc_accent_dark_bg">#1A1530</color>
     <color name="csfc_accent_dark_variant">#2A0050</color>
-    <color name="csfc_surface_dark">#0D0114</color>
+    <color name="csfc_surface_dark">#14121D</color>
     <color name="on_surface">#FFFFFFFF</color>
     <color name="on_surface_medium">#99FFFFFF</color>
+
+    <color name="csfc_key_number">#36333E</color>
+    <color name="csfc_key_number_text">#ECE6F0</color>
+    <color name="csfc_key_operator">#514060</color>
+    <color name="csfc_key_operator_text">#F0DAFF</color>
+    <color name="csfc_key_active">#E7B7E7</color>
+    <color name="csfc_key_active_text">#2A0050</color>
+    <color name="csfc_display_expression">#F5F0FA</color>
+    <color name="csfc_display_result">#E29CE8</color>
 </resources>

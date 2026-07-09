@@ -1,12 +1,21 @@
 package com.jhaiian.csfc
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import com.jhaiian.csfc.ui.calculator.CalculatorScreen
+import com.jhaiian.csfc.ui.theme.CSFCTheme
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        enableEdgeToEdge()
+        setContent {
+            CSFCTheme {
+                CalculatorScreen()
+            }
+        }
     }
 }

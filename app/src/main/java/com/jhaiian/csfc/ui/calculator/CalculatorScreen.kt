@@ -12,6 +12,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
@@ -61,7 +63,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -338,6 +339,7 @@ private fun ExpressionField(
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     var cursorVisible by remember { mutableStateOf(true) }
     val density = LocalDensity.current
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(fieldValue.text, fieldValue.selection) {
         cursorVisible = true
@@ -347,34 +349,42 @@ private fun ExpressionField(
         }
     }
 
-    Box(modifier = Modifier.fillMaxWidth()) {
+    // Keeps the view caught up while typing at the end (the common case). If the
+    // cursor is somewhere in the middle instead, this leaves scroll position alone —
+    // the text is still fully reachable by hand, just not auto-followed there.
+    LaunchedEffect(fieldValue.text) {
+        if (fieldValue.selection.start >= fieldValue.text.length) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState, reverseScrolling = true),
+    ) {
         if (fieldValue.text.isEmpty()) {
             Text(
                 text = placeholder,
                 style = MaterialTheme.typography.displayLarge,
                 color = color,
-                textAlign = TextAlign.End,
                 maxLines = 1,
-                modifier = Modifier.fillMaxWidth(),
             )
         }
         Text(
             text = fieldValue.text,
             style = MaterialTheme.typography.displayLarge,
             color = color,
-            textAlign = TextAlign.End,
             maxLines = 1,
-            overflow = TextOverflow.Clip,
+            softWrap = false,
             onTextLayout = { layoutResult = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { tapOffset ->
-                            layoutResult?.let { onTap(it.getOffsetForPosition(tapOffset)) }
-                        },
-                    )
-                },
+            modifier = Modifier.pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { tapOffset ->
+                        layoutResult?.let { onTap(it.getOffsetForPosition(tapOffset)) }
+                    },
+                )
+            },
         )
         if (cursorVisible) {
             layoutResult?.let { lr ->

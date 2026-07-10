@@ -312,7 +312,7 @@ private fun TopBar(modifier: Modifier = Modifier, onOpenCrashLogs: () -> Unit) {
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.menu_crash_logs)) },
+                    text = { Text(stringResource(R.string.crash_logs_title)) },
                     leadingIcon = { Icon(Icons.Default.BugReport, contentDescription = null) },
                     onClick = {
                         menuExpanded = false

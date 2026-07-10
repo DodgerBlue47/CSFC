@@ -378,15 +378,18 @@ private fun ExpressionField(
         )
         if (cursorVisible) {
             layoutResult?.let { lr ->
-                val safeOffset = fieldValue.selection.start.coerceIn(0, fieldValue.text.length)
-                val rect = lr.getCursorRect(safeOffset)
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-                        .width(2.dp)
-                        .height(with(density) { rect.height.toDp() })
-                        .background(color),
-                )
+                if (lr.layoutInput.text.length == fieldValue.text.length) {
+                    val safeOffset = fieldValue.selection.start.coerceIn(0, fieldValue.text.length)
+                    runCatching { lr.getCursorRect(safeOffset) }.getOrNull()?.let { rect ->
+                        Box(
+                            modifier = Modifier
+                                .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+                                .width(2.dp)
+                                .height(with(density) { rect.height.toDp() })
+                                .background(color),
+                        )
+                    }
+                }
             }
         }
     }

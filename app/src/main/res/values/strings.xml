@@ -43,6 +43,18 @@
     <string name="key_log_inv">10ˣ</string>
     <string name="error_label">Error</string>
 
+    <string name="crash_logs_title">Crash Logs</string>
+    <string name="crash_logs_empty">No crashes recorded</string>
+    <string name="crash_clear_confirm_title">Clear all crash logs?</string>
+    <string name="crash_clear_confirm_message">This can\'t be undone.</string>
+    <string name="crash_clear_confirm_action">Clear all</string>
+    <string name="crash_copied_toast">Copied to clipboard</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_back">Back</string>
+    <string name="content_description_clear_all">Clear all</string>
+
     <string name="content_description_backspace">Backspace</string>
     <string name="content_description_more_options">More options</string>
     <string name="content_description_expand">Show scientific keys</string>

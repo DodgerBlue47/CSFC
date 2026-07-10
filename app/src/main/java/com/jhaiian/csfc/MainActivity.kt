@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.jhaiian.csfc.ui.calculator.CalculatorScreen
+import com.jhaiian.csfc.ui.CsfcNavHost
 import com.jhaiian.csfc.ui.theme.CSFCTheme
 
 class MainActivity : ComponentActivity() {
@@ -14,7 +14,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CSFCTheme {
-                CalculatorScreen()
+                CsfcNavHost()
             }
         }
     }

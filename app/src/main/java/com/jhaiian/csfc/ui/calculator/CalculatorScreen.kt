@@ -35,9 +35,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -79,7 +82,10 @@ private const val BACKSPACE_REPEAT_INTERVAL_MS = 90L
 private const val CURSOR_BLINK_MS = 530L
 
 @Composable
-fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
+fun CalculatorScreen(
+    viewModel: CalculatorViewModel = viewModel(),
+    onOpenCrashLogs: () -> Unit = {},
+) {
     val uiState = viewModel.uiState
     val colors = CalculatorTheme.colors
     var isExpanded by rememberSaveable { mutableStateOf(false) }
@@ -99,7 +105,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        TopBar(modifier = Modifier.statusBarsPadding())
+        TopBar(modifier = Modifier.statusBarsPadding(), onOpenCrashLogs = onOpenCrashLogs)
 
         Column(
             modifier = Modifier
@@ -287,7 +293,8 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
 }
 
 @Composable
-private fun TopBar(modifier: Modifier = Modifier) {
+private fun TopBar(modifier: Modifier = Modifier, onOpenCrashLogs: () -> Unit) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -295,12 +302,24 @@ private fun TopBar(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.weight(1f))
-        IconButton(onClick = {}) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.content_description_more_options),
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.content_description_more_options),
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.menu_crash_logs)) },
+                    leadingIcon = { Icon(Icons.Default.BugReport, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onOpenCrashLogs()
+                    },
+                )
+            }
         }
     }
 }

@@ -27,11 +27,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.MoreVert
@@ -42,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,12 +53,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,12 +69,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jhaiian.csfc.R
 import com.jhaiian.csfc.ui.theme.CSFCTheme
 import com.jhaiian.csfc.ui.theme.CalculatorTheme
+import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val BACKSPACE_INITIAL_DELAY_MS = 450L
 private const val BACKSPACE_REPEAT_INTERVAL_MS = 90L
+private const val CURSOR_BLINK_MS = 530L
 
 @Composable
 fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
@@ -102,26 +109,11 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
             verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.End,
         ) {
-            BasicTextField(
-                value = uiState.fieldValue,
-                onValueChange = { viewModel.onFieldValueChange(it) },
-                readOnly = true,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.displayLarge.copy(color = bigTextColor, textAlign = TextAlign.End),
-                cursorBrush = SolidColor(bigTextColor),
-                modifier = Modifier.fillMaxWidth(),
-                decorationBox = { innerField ->
-                    Box(contentAlignment = Alignment.CenterEnd) {
-                        if (uiState.fieldValue.text.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.key_0),
-                                style = MaterialTheme.typography.displayLarge,
-                                color = colors.displayExpression,
-                            )
-                        }
-                        innerField()
-                    }
-                },
+            ExpressionField(
+                fieldValue = uiState.fieldValue,
+                color = bigTextColor,
+                placeholder = stringResource(R.string.key_0),
+                onTap = { viewModel.moveCursor(it) },
             )
             Spacer(Modifier.height(12.dp))
             Text(
@@ -309,6 +301,74 @@ private fun TopBar(modifier: Modifier = Modifier) {
                 contentDescription = stringResource(R.string.content_description_more_options),
                 tint = MaterialTheme.colorScheme.onBackground,
             )
+        }
+    }
+}
+
+// Not a real text field: a plain Text that reports its own layout, a tap gesture that
+// resolves a tap position to a character index via that layout, and a manually blinked
+// bar drawn at that character's rect. Avoids fighting the platform IME/focus system
+// entirely, since this never becomes a genuine input-connected field.
+@Composable
+private fun ExpressionField(
+    fieldValue: TextFieldValue,
+    color: Color,
+    placeholder: String,
+    onTap: (Int) -> Unit,
+) {
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var cursorVisible by remember { mutableStateOf(true) }
+    val density = LocalDensity.current
+
+    LaunchedEffect(fieldValue.text, fieldValue.selection) {
+        cursorVisible = true
+        while (true) {
+            delay(CURSOR_BLINK_MS)
+            cursorVisible = !cursorVisible
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (fieldValue.text.isEmpty()) {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.displayLarge,
+                color = color,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Text(
+            text = fieldValue.text,
+            style = MaterialTheme.typography.displayLarge,
+            color = color,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            onTextLayout = { layoutResult = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { tapOffset ->
+                            layoutResult?.let { onTap(it.getOffsetForPosition(tapOffset)) }
+                        },
+                    )
+                },
+        )
+        if (cursorVisible) {
+            layoutResult?.let { lr ->
+                val safeOffset = fieldValue.selection.start.coerceIn(0, fieldValue.text.length)
+                val rect = lr.getCursorRect(safeOffset)
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+                        .width(2.dp)
+                        .height(with(density) { rect.height.toDp() })
+                        .background(color),
+                )
+            }
         }
     }
 }

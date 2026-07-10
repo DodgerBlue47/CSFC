@@ -3,7 +3,7 @@ package com.jhaiian.csfc.ui.calculator
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.lifecycle.ViewModel
 
 class CalculatorViewModel : ViewModel() {
@@ -15,11 +15,13 @@ class CalculatorViewModel : ViewModel() {
         uiState = reduceCalculatorState(uiState, action)
     }
 
-    // The field is read-only so the software keyboard never appears, but taps and
-    // drags still move the cursor/selection and arrive here. Text itself never
-    // changes through this path. Leaving "just evaluated" clears the result styling,
-    // since touching the field again means the user is editing from that point.
-    fun onFieldValueChange(new: TextFieldValue) {
-        uiState = uiState.copy(fieldValue = new, justEvaluated = false)
+    // Called when the expression is tapped; index is a character offset resolved from
+    // the tap position via the displayed Text's own layout result.
+    fun moveCursor(index: Int) {
+        val clamped = index.coerceIn(0, uiState.fieldValue.text.length)
+        uiState = uiState.copy(
+            fieldValue = uiState.fieldValue.copy(selection = TextRange(clamped)),
+            justEvaluated = false,
+        )
     }
 }

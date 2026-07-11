@@ -18,6 +18,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -63,8 +64,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -329,6 +332,12 @@ private fun TopBar(modifier: Modifier = Modifier, onOpenCrashLogs: () -> Unit) {
 // resolves a tap position to a character index via that layout, and a manually blinked
 // bar drawn at that character's rect. Avoids fighting the platform IME/focus system
 // entirely, since this never becomes a genuine input-connected field.
+//
+// Right-alignment (textAlign = End within a fillMaxWidth Text) and horizontal scrolling
+// don't compose the way it's tempting to assume — reverseScrolling only affects scroll
+// *direction* semantics, not idle positioning of short content — so rather than force
+// both into one configuration, this switches between two plain layouts: right-aligned
+// when the expression fits, natural-width-and-scrollable once it actually overflows.
 @Composable
 private fun ExpressionField(
     fieldValue: TextFieldValue,
@@ -358,51 +367,84 @@ private fun ExpressionField(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(scrollState, reverseScrolling = true),
-    ) {
-        if (fieldValue.text.isEmpty()) {
-            Text(
-                text = placeholder,
-                style = MaterialTheme.typography.displayLarge,
-                color = color,
-                maxLines = 1,
-            )
-        }
-        Text(
-            text = fieldValue.text,
-            style = MaterialTheme.typography.displayLarge,
-            color = color,
-            maxLines = 1,
-            softWrap = false,
-            onTextLayout = { layoutResult = it },
-            modifier = Modifier.pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { tapOffset ->
-                        layoutResult?.let { onTap(it.getOffsetForPosition(tapOffset)) }
-                    },
-                )
-            },
+    val tapModifier = Modifier.pointerInput(Unit) {
+        detectTapGestures(
+            onTap = { tapOffset -> layoutResult?.let { onTap(it.getOffsetForPosition(tapOffset)) } },
         )
-        if (cursorVisible) {
-            layoutResult?.let { lr ->
-                if (lr.layoutInput.text.length == fieldValue.text.length) {
-                    val safeOffset = fieldValue.selection.start.coerceIn(0, fieldValue.text.length)
-                    runCatching { lr.getCursorRect(safeOffset) }.getOrNull()?.let { rect ->
-                        Box(
-                            modifier = Modifier
-                                .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-                                .width(2.dp)
-                                .height(with(density) { rect.height.toDp() })
-                                .background(color),
-                        )
-                    }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val lr = layoutResult
+        val overflows = lr != null &&
+            lr.layoutInput.text.length == fieldValue.text.length &&
+            lr.size.width > constraints.maxWidth
+
+        if (overflows) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState),
+            ) {
+                Text(
+                    text = fieldValue.text,
+                    style = MaterialTheme.typography.displayLarge,
+                    color = color,
+                    maxLines = 1,
+                    softWrap = false,
+                    onTextLayout = { layoutResult = it },
+                    modifier = tapModifier,
+                )
+                CursorBar(layoutResult, fieldValue, color, cursorVisible, density)
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (fieldValue.text.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        style = MaterialTheme.typography.displayLarge,
+                        color = color,
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
+                Text(
+                    text = fieldValue.text,
+                    style = MaterialTheme.typography.displayLarge,
+                    color = color,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    onTextLayout = { layoutResult = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(tapModifier),
+                )
+                CursorBar(layoutResult, fieldValue, color, cursorVisible, density)
             }
         }
     }
+}
+
+@Composable
+private fun CursorBar(
+    layoutResult: TextLayoutResult?,
+    fieldValue: TextFieldValue,
+    color: Color,
+    visible: Boolean,
+    density: Density,
+) {
+    if (!visible) return
+    val lr = layoutResult ?: return
+    if (lr.layoutInput.text.length != fieldValue.text.length) return
+    val safeOffset = fieldValue.selection.start.coerceIn(0, fieldValue.text.length)
+    val rect = runCatching { lr.getCursorRect(safeOffset) }.getOrNull() ?: return
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+            .width(2.dp)
+            .height(with(density) { rect.height.toDp() })
+            .background(color),
+    )
 }
 
 @Composable

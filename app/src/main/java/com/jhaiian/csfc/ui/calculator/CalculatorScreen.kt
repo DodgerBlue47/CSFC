@@ -64,7 +64,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
@@ -333,11 +332,13 @@ private fun TopBar(modifier: Modifier = Modifier, onOpenCrashLogs: () -> Unit) {
 // bar drawn at that character's rect. Avoids fighting the platform IME/focus system
 // entirely, since this never becomes a genuine input-connected field.
 //
-// Right-alignment (textAlign = End within a fillMaxWidth Text) and horizontal scrolling
-// don't compose the way it's tempting to assume — reverseScrolling only affects scroll
-// *direction* semantics, not idle positioning of short content — so rather than force
-// both into one configuration, this switches between two plain layouts: right-aligned
-// when the expression fits, natural-width-and-scrollable once it actually overflows.
+// This is always the same scrollable, natural-width layout — never a structural branch
+// between "fits" and "overflows". A branch based on a measurement from the previous
+// frame is stale for exactly one frame every time the text crosses the threshold, which
+// showed up as real, visible glitching. Instead, a leading gap is computed continuously:
+// it equals all the slack space when the text is short (visually right-aligning it) and
+// shrinks to zero once the text is wide enough to need scrolling. Nothing ever swaps
+// composable structure, so there's nothing to go stale.
 @Composable
 private fun ExpressionField(
     fieldValue: TextFieldValue,
@@ -374,53 +375,39 @@ private fun ExpressionField(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val containerWidthPx = constraints.maxWidth
         val lr = layoutResult
-        val overflows = lr != null &&
-            lr.layoutInput.text.length == fieldValue.text.length &&
-            lr.size.width > constraints.maxWidth
+        val layoutMatchesText = lr != null && lr.layoutInput.text.length == fieldValue.text.length
+        val leadingGapPx = if (layoutMatchesText) (containerWidthPx - lr!!.size.width).coerceAtLeast(0) else 0
+        val leadingGapDp = with(density) { leadingGapPx.toDp() }
 
-        if (overflows) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState),
-            ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(scrollState),
+        ) {
+            if (fieldValue.text.isEmpty()) {
                 Text(
-                    text = fieldValue.text,
+                    text = placeholder,
                     style = MaterialTheme.typography.displayLarge,
                     color = color,
                     maxLines = 1,
                     softWrap = false,
-                    onTextLayout = { layoutResult = it },
-                    modifier = tapModifier,
+                    modifier = Modifier.padding(start = leadingGapDp),
                 )
-                CursorBar(layoutResult, fieldValue, color, cursorVisible, density)
             }
-        } else {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                if (fieldValue.text.isEmpty()) {
-                    Text(
-                        text = placeholder,
-                        style = MaterialTheme.typography.displayLarge,
-                        color = color,
-                        textAlign = TextAlign.End,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Text(
-                    text = fieldValue.text,
-                    style = MaterialTheme.typography.displayLarge,
-                    color = color,
-                    textAlign = TextAlign.End,
-                    maxLines = 1,
-                    onTextLayout = { layoutResult = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(tapModifier),
-                )
-                CursorBar(layoutResult, fieldValue, color, cursorVisible, density)
-            }
+            Text(
+                text = fieldValue.text,
+                style = MaterialTheme.typography.displayLarge,
+                color = color,
+                maxLines = 1,
+                softWrap = false,
+                onTextLayout = { layoutResult = it },
+                modifier = Modifier
+                    .padding(start = leadingGapDp)
+                    .then(tapModifier),
+            )
+            CursorBar(layoutResult, fieldValue, color, cursorVisible, density, leadingGapPx)
         }
     }
 }
@@ -432,6 +419,7 @@ private fun CursorBar(
     color: Color,
     visible: Boolean,
     density: Density,
+    leadingGapPx: Int,
 ) {
     if (!visible) return
     val lr = layoutResult ?: return
@@ -440,12 +428,13 @@ private fun CursorBar(
     val rect = runCatching { lr.getCursorRect(safeOffset) }.getOrNull() ?: return
     Box(
         modifier = Modifier
-            .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+            .offset { IntOffset(leadingGapPx + rect.left.roundToInt(), rect.top.roundToInt()) }
             .width(2.dp)
             .height(with(density) { rect.height.toDp() })
             .background(color),
     )
 }
+
 
 @Composable
 private fun ExpandToggle(
